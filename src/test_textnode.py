@@ -1,6 +1,6 @@
 import unittest
 
-from textnode import TextNode, TextType, split_nodes_delimiter, extract_markdown_images, extract_markdown_links, split_nodes_image, split_nodes_link, text_to_textnodes
+from textnode import TextNode, TextType, split_nodes_delimiter, extract_markdown_images, extract_markdown_links, split_nodes_image, split_nodes_link, text_to_textnodes, markdown_to_blocks, BlockType, block_to_block_type, markdown_to_html_node, ParentNode, text_to_children
 
 
 class TestTextNode(unittest.TestCase):
@@ -177,6 +177,133 @@ class TestTextToTextNodes(unittest.TestCase):
         self.assertEqual(len(nodes), 4)
         self.assertEqual(nodes[1].text_type, TextType.BOLD)
         self.assertEqual(nodes[3].text_type, TextType.BOLD)
+
+
+class TestMarkdownToHTML(unittest.TestCase):
+    def test_markdown_to_blocks(self):
+        md = """
+This is **bolded** paragraph
+
+This is another paragraph with _italic_ text and `code` here
+This is the same paragraph on a new line
+
+- This is a list
+- with items
+"""
+        blocks = markdown_to_blocks(md)
+        self.assertEqual(
+            blocks,
+            [
+                "This is **bolded** paragraph",
+                "This is another paragraph with _italic_ text and `code` here\nThis is the same paragraph on a new line",
+                "- This is a list\n- with items",
+            ],
+        )
+
+    def test_markdown_to_blocks_newlines(self):
+        # Testing multiple newlines and leading/trailing whitespace
+        md = """
+# This is a heading
+
+
+This is a paragraph with extra space.      
+
+  
+- List item
+"""
+        blocks = markdown_to_blocks(md)
+        self.assertEqual(
+            blocks,
+            [
+                "# This is a heading",
+                "This is a paragraph with extra space.",
+                "- List item",
+            ],
+        )
+
+
+class TestBlockToBlockType(unittest.TestCase):
+    def test_heading(self):
+        self.assertEqual(block_to_block_type("# Heading"), BlockType.HEADING)
+        self.assertEqual(block_to_block_type("###### Tiny Heading"), BlockType.HEADING)
+        # Invalid heading (no space)
+        self.assertEqual(block_to_block_type("###Invalid"), BlockType.PARAGRAPH)
+
+    def test_code(self):
+        code = "```\nprint('hello')\n```"
+        self.assertEqual(block_to_block_type(code), BlockType.CODE)
+
+    def test_quote(self):
+        quote = "> Line 1\n> Line 2"
+        self.assertEqual(block_to_block_type(quote), BlockType.QUOTE)
+        # Mixed content
+        bad_quote = "> Line 1\nLine 2"
+        self.assertEqual(block_to_block_type(bad_quote), BlockType.PARAGRAPH)
+
+    def test_unordered_list(self):
+        ul = "- Item 1\n- Item 2"
+        self.assertEqual(block_to_block_type(ul), BlockType.UNORDERED_LIST)
+        # Missing space
+        bad_ul = "-Item 1"
+        self.assertEqual(block_to_block_type(bad_ul), BlockType.PARAGRAPH)
+
+    def test_ordered_list(self):
+        ol = "1. First\n2. Second\n3. Third"
+        self.assertEqual(block_to_block_type(ol), BlockType.ORDERED_LIST)
+        # Wrong increment
+        bad_ol = "1. First\n3. Second"
+        self.assertEqual(block_to_block_type(bad_ol), BlockType.PARAGRAPH)
+        # Doesn't start with 1
+        bad_ol_start = "2. First\n3. Second"
+        self.assertEqual(block_to_block_type(bad_ol_start), BlockType.PARAGRAPH)
+
+    def test_paragraph(self):
+        para = "Just a normal paragraph of text."
+        self.assertEqual(block_to_block_type(para), BlockType.PARAGRAPH)
+
+
+class TestMarkdownToHTMLNode(unittest.TestCase):
+    def test_paragraph(self):
+        md = "This is a simple paragraph."
+        node = markdown_to_html_node(md)
+        self.assertEqual(node.tag, "div")
+        self.assertEqual(node.children[0].tag, "p")
+        self.assertEqual(node.children[0].children[0].value, "This is a simple paragraph.")
+
+    def test_heading(self):
+        md = "### This is a level 3 heading"
+        node = markdown_to_html_node(md)
+        self.assertEqual(node.children[0].tag, "h3")
+        self.assertEqual(node.children[0].children[0].value, "This is a level 3 heading")
+
+    def test_code_block(self):
+        md = "```\npython\nprint('hi')\n```"
+        node = markdown_to_html_node(md)
+        self.assertEqual(node.children[0].tag, "pre")
+        self.assertEqual(node.children[0].children[0].tag, "code")
+        # Ensure it didn't try to parse 'hi' as inline markdown
+        self.assertEqual(node.children[0].children[0].children[0].value, "python\nprint('hi')")
+
+    def test_lists(self):
+        md = "- item 1\n- item 2"
+        node = markdown_to_html_node(md)
+        self.assertEqual(node.children[0].tag, "ul")
+        self.assertEqual(len(node.children[0].children), 2)
+        self.assertEqual(node.children[0].children[0].tag, "li")
+
+    def test_complex_markdown(self):
+        md = """
+# Heading
+
+This is a paragraph with **bold**.
+
+- List item
+"""
+        node = markdown_to_html_node(md)
+        self.assertEqual(len(node.children), 3)
+        self.assertEqual(node.children[0].tag, "h1")
+        self.assertEqual(node.children[1].tag, "p")
+        self.assertEqual(node.children[2].tag, "ul")
 
 
 if __name__ == "__main__":

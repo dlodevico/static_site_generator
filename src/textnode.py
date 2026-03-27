@@ -1,6 +1,6 @@
 import re
 from enum import Enum
-from htmlnode import LeafNode
+from htmlnode import LeafNode, ParentNode
 
 class TextType(Enum):
     TEXT = "text"
@@ -161,3 +161,136 @@ def text_to_textnodes(text):
     nodes = split_nodes_link(nodes)
 
     return nodes
+
+
+def markdown_to_blocks(markdown):
+    # Split the document by double newlines
+    raw_blocks = markdown.split("\n\n")
+    blocks = []
+
+    for block in raw_blocks:
+        # Strip leading/trailing whitespace
+        cleaned_block = block.strip()
+
+        # Only add to the list if the block isn't just empty space
+        if cleaned_block != "":
+            blocks.append(cleaned_block)
+
+    return blocks
+
+
+class BlockType(Enum):
+    PARAGRAPH = "paragraph"
+    HEADING = "heading"
+    CODE = "code"
+    QUOTE = "quote"
+    UNORDERED_LIST = "unordered_list"
+    ORDERED_LIST = "ordered_list"
+
+def block_to_block_type(block):
+    lines = block.split("\n")
+
+    # Heading check: 1-6 # followed by a space
+    if re.match(r"^#{1,6} ", block):
+        return BlockType.HEADING
+
+    # Code block check: starts and ends with ```
+    if block.startswith("```") and block.endswith("```"):
+        return BlockType.CODE
+
+    # Quote block check: every line starts with >
+    if all(line.startswith(">") for line in lines):
+        return BlockType.QUOTE
+
+    # Unordered list check: every line starts with "- "
+    if all(line.startswith("- ") for line in lines):
+        return BlockType.UNORDERED_LIST
+
+    # Ordered list check: starts at 1. and increments
+    if block.startswith("1. "):
+        is_ordered = True
+        for i, line in enumerate(lines):
+            expected_start = f"{i + 1}. "
+            if not line.startswith(expected_start):
+                is_ordered = False
+                break
+        if is_ordered:
+            return BlockType.ORDERED_LIST
+
+    # Default case
+    return BlockType.PARAGRAPH
+
+def text_to_children(text):
+    # 1. Convert raw text to a list of TextNode objects (handles bold, italic, etc.)
+    # This assumes you have a previously built text_to_textnodes function
+    text_nodes = text_to_textnodes(text)
+    
+    # 2. Convert those TextNodes into HTMLNodes (LeafNodes)
+    children = []
+    for text_node in text_nodes:
+        html_node = text_node_to_html_node(text_node)
+        children.append(html_node)
+    return children
+
+def markdown_to_html_node(markdown):
+    # 1. Split into blocks
+    blocks = markdown_to_blocks(markdown)
+    children = []
+
+    # 2. Loop over blocks
+    for block in blocks:
+        block_type = block_to_block_type(block)
+
+        # 3. Create HTMLNode based on type
+        if block_type == BlockType.HEADING:
+            level = 0
+            for char in block:
+                if char == "#":
+                    level += 1
+                else:
+                    break
+            # Strip hashes and the space
+            content = block[level + 1:]
+            children.append(ParentNode(f"h{level}", text_to_children(content)))
+
+        elif block_type == BlockType.CODE:
+            # Code blocks are special: no inline parsing, nested <code> inside <pre>
+            # Remove the backticks (top and bottom)
+            content = block.strip("`").strip("\n")
+            code_node = ParentNode("code", [LeafNode(None, content)])
+            children.append(ParentNode("pre", [code_node]))
+
+        elif block_type == BlockType.QUOTE:
+            # Strip the '>' from each line
+            lines = block.split("\n")
+            new_lines = []
+            for line in lines:
+                new_lines.append(line.lstrip(">").strip())
+            content = " ".join(new_lines)
+            children.append(ParentNode("blockquote", text_to_children(content)))
+
+        elif block_type == BlockType.UNORDERED_LIST:
+            # Each line becomes an <li>
+            items = block.split("\n")
+            li_nodes = []
+            for item in items:
+                # Remove "- "
+                content = item[2:]
+                li_nodes.append(ParentNode("li", text_to_children(content)))
+            children.append(ParentNode("ul", li_nodes))
+
+        elif block_type == BlockType.ORDERED_LIST:
+            # Each line becomes an <li>
+            items = block.split("\n")
+            li_nodes = []
+            for item in items:
+                # Remove "1. " or "2. " (find the first space)
+                content = item[item.find(" ") + 1:]
+                li_nodes.append(ParentNode("li", text_to_children(content)))
+            children.append(ParentNode("ol", li_nodes))
+
+        else: # Paragraph
+            children.append(ParentNode("p", text_to_children(block)))
+
+    # 4. Wrap everything in a div parent
+    return ParentNode("div", children)
