@@ -1,24 +1,29 @@
 import os
 import shutil
+import sys 
 from gencontent import generate_page, generate_pages_recursive
 
 def main():
+    basepath = "/"
+    if len(sys.argv) > 1:
+        basepath = sys.argv[1]
+
     dir_path_static = "./static"
-    dir_path_public = "./public"
     dir_path_content = "./content"
     template_path = "template.html"
+    dir_path_docs = "./docs"
 
-    print("Starting build process...")
+    print(f"Starting build process to {dir_path_docs} with basepath: {basepath}")
 
-    clean_and_copy(dir_path_static, dir_path_public)
+    clean_and_copy(dir_path_static, dir_path_docs)
 
-    generate_pages_recursive(dir_path_content, template_path, dir_path_public)
-    
-    print("Build complete! All pages generated.")
+    generate_pages_recursive(dir_path_content, template_path, dir_path_docs, basepath)
+
+    print("Build complete!")
 
 def clean_and_copy(src, dst):
     if os.path.exists(dst):
-        print(f"Cleaning destination: {dst}...")
+        print(f"Cleaning {dst} directory...")
         shutil.rmtree(dst)
 
     os.mkdir(dst)
@@ -26,23 +31,17 @@ def clean_and_copy(src, dst):
     if not os.path.exists(src):
         raise Exception(f"Source directory {src} does not exist!")
 
-    copy_recursive(src, dst)
-
 def copy_recursive(src_path, dst_path):
     nodes = os.listdir(src_path)
-
     for node in nodes:
         source_node_path = os.path.join(src_path, node)
         dest_node_path = os.path.join(dst_path, node)
-
         if os.path.isfile(source_node_path):
-            print(f"Copying file: {source_node_path} -> {dest_node_path}")
             shutil.copy(source_node_path, dest_node_path)
         else:
-            print(f"Creating directory: {dest_node_path}")
-            if not os.path.exists(dest_node_path):
-                os.mkdir(dest_node_path)
+            os.makedirs(dest_node_path, exist_ok=True)
             copy_recursive(source_node_path, dest_node_path)
+
 
 if __name__ == "__main__":
     main()
