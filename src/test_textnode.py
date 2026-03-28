@@ -1,6 +1,6 @@
 import unittest
 
-from textnode import TextNode, TextType, split_nodes_delimiter, extract_markdown_images, extract_markdown_links, split_nodes_image, split_nodes_link, text_to_textnodes, markdown_to_blocks, BlockType, block_to_block_type, markdown_to_html_node, ParentNode, text_to_children
+from textnode import TextNode, TextType, split_nodes_delimiter, extract_markdown_images, extract_markdown_links, split_nodes_image, split_nodes_link, text_to_textnodes, markdown_to_blocks, BlockType, block_to_block_type, markdown_to_html_node, ParentNode, text_to_children, extract_title
 
 
 class TestTextNode(unittest.TestCase):
@@ -304,6 +304,31 @@ This is a paragraph with **bold**.
         self.assertEqual(node.children[0].tag, "h1")
         self.assertEqual(node.children[1].tag, "p")
         self.assertEqual(node.children[2].tag, "ul")
+
+
+class TestExtractTitle(unittest.TestCase):
+    def test_basic_title(self):
+        self.assertEqual(extract_title("# Hello"), "Hello")
+
+    def test_title_with_extra_spaces(self):
+        self.assertEqual(extract_title("#    Spacey Title   "), "Spacey Title")
+
+    def test_title_middle_of_file(self):
+        md = "Some text\n# Actual Title\nMore text"
+        self.assertEqual(extract_title(md), "Actual Title")
+
+    def test_no_title_raises_exception(self):
+        md = "## This is an H2\nJust some text."
+        with self.assertRaises(Exception) as cm:
+            extract_title(md)
+        self.assertEqual(str(cm.exception), "No H1 header found in markdown")
+
+    def test_only_hash_no_space(self):
+        # Technically Markdown H1 requires a space after the '#'
+        # This test ensures we don't accidentally grab '### H3'
+        md = "### This is H3\n#TrueH1WithNoSpace"
+        with self.assertRaises(Exception):
+            extract_title(md)
 
 
 if __name__ == "__main__":
